@@ -1,0 +1,7 @@
+{
+  "name": "太哇卡咖啡 (Taiwaka Coffee)",
+  "description": "源自火山土壤的高端精品咖啡烘焙商。搭载 AI 咖啡智能指南。",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
