@@ -5,31 +5,13 @@ export interface Product {
   price: number;
   category: 'coffee' | 'merchandise' | 'equipment';
   image: string;
-  images?: string[];
   description: string;
   tag?: string;
-}
-
-export interface Review {
-  id: string;
-  productId: string;
-  rating: number;
-  comment: string;
-  author: string;
-  date: string;
+  color?: string;
 }
 
 export interface CartItem extends Product {
   quantity: number;
 }
 
-export interface Location {
-  id: string;
-  name: string;
-  address: string;
-  city: string;
-  coordinates: { lat: number; lng: number };
-  image: string;
-}
-
-export type Page = 'home' | 'shop' | 'locations' | 'story' | 'cart';
+export type Page = 'home' | 'shop' | 'story' | 'cart';
