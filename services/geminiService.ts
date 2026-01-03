@@ -7,17 +7,22 @@ export async function getCoffeeRecommendation(preference: string) {
   try {
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `用户偏好: "${preference}"。作为太哇卡 (Taiwaka) 的风味导师，请根据我们对非洲火山风土、原生豆种及处理法的深厚研究，为用户推荐一款咖啡。
-      背景参考：太哇卡源自斯瓦希里语，寓意“鹰的敏锐狩猎”。
-      核心理念：好咖啡，你我轻松拥有。
-      请使用敏锐、专业且富有穿透力的文字，解释风味背后的产地故事，100字以内。`,
+      contents: `用户需求: "${preference}"。作为太哇卡 (Taiwaka) 的首席咖啡猎寻专家，请用一种冷静、极简、充满品牌高级感的方式回复。
+      
+      要求：
+      1. 体现产地风土 (Terroir) 的精准性。
+      2. 语气类似高端生活杂志的专栏。
+      3. 必须推荐一个风味方向（如：清冽花香、火山深邃巧克力、热带浆果气息）。
+      4. 字数控制在 80 字以内。
+      
+      品牌背景：太哇卡，猎寻于火山之巅，极致纯净。`,
       config: {
-        systemInstruction: "你是太哇卡咖啡的风味专家。你拥有如鹰般的敏锐洞察力，专注于非洲优质咖啡豆的探寻。你的回答应体现对产地、豆种和原始处理法的尊重，同时保持简洁易懂。",
+        systemInstruction: "你不再是 AI 助手，而是 Taiwaka Specialty Coffee 的品牌风味顾问。你的表达应该是感性且专业的，能够瞬间勾勒出咖啡在舌尖的画面感。避免使用过于生硬的销售用语。",
       }
     });
-    return response.text || "寻觅卓越。我为您推荐源自埃塞俄比亚原产地的『山雾拼配』，它如鹰般精准捕捉了高海拔柑橘的清冽与花香。";
+    return response.text || "寻觅卓越。我们为您推荐源自火山土壤的高海拔豆种，那是大自然最精准的馈赠。";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "让咖啡回归本质。我们的『太哇卡甄选』正等待您的品鉴。";
+    return "回归咖啡的本质。每一颗太哇卡豆子都承载着产地的灵魂，正等待您的品鉴。";
   }
 }

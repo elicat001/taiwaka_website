@@ -1,166 +1,217 @@
 
-import React, { useState, useEffect } from 'react';
-import { Icons, COLORS } from './constants';
+import React, { useState, useEffect, useRef } from 'react';
+import { Icons, COLORS, INITIAL_PRODUCTS } from './constants';
 import { Product, CartItem, Page } from './types';
+import { getCoffeeRecommendation } from './services/geminiService';
 
-// API 基础路径 (指向您的 PHP 后端)
 const API_URL = './api/products.php';
 
-// --- Shared Layout Components ---
+// --- Shared Components ---
 
 const Navbar: React.FC<{ 
-  currentPage: Page, 
+  page: Page, 
   setPage: (p: Page) => void, 
   cartCount: number,
-  isScrolled: boolean
-}> = ({ currentPage, setPage, cartCount, isScrolled }) => {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  isScrolled: boolean 
+}> = ({ page, setPage, cartCount, isScrolled }) => {
+  const isLightPage = page === 'home';
+  const textColor = isScrolled || !isLightPage ? 'text-gray-900' : 'text-white';
+  const navBg = isScrolled ? 'bg-white shadow-sm' : 'bg-transparent';
 
   return (
-    <nav className={`fixed top-0 left-0 w-full z-50 transition-all duration-500 ${isScrolled ? 'bg-[#280071] shadow-2xl py-3' : 'bg-transparent py-6'}`}>
-      <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-        <button onClick={() => setMobileMenuOpen(true)} className="lg:hidden text-white"><Icons.Menu /></button>
-        
-        <div className="hidden lg:flex space-x-12 text-[11px] font-bold uppercase tracking-[0.25em] text-white/60">
-          <button onClick={() => setPage('shop')} className={`hover:text-white transition-all ${currentPage === 'shop' ? 'text-white border-b border-white' : ''}`}>精选商城</button>
-          <button onClick={() => setPage('story')} className={`hover:text-white transition-all ${currentPage === 'story' ? 'text-white border-b border-white' : ''}`}>品牌故事</button>
+    <nav className={`fixed top-0 left-0 w-full z-[100] transition-all duration-700 py-6 px-10 ${navBg}`}>
+      <div className="max-w-[1440px] mx-auto flex justify-between items-center">
+        <div className="flex items-center space-x-12">
+          <button onClick={() => setPage('home')} className="hover:opacity-70 transition-opacity">
+            <Icons.Logo size={isScrolled ? 34 : 42} />
+          </button>
+          <div className={`hidden lg:flex space-x-10 text-[10px] font-bold uppercase tracking-[0.4em] ${textColor}`}>
+            <button onClick={() => setPage('shop')} className={`hover:opacity-50 ${page === 'shop' ? 'border-b border-current pb-1' : ''}`}>精选商城</button>
+            <button onClick={() => setPage('story')} className={`hover:opacity-50 ${page === 'story' ? 'border-b border-current pb-1' : ''}`}>品牌故事</button>
+          </div>
         </div>
         
-        <div className="flex items-center space-x-4 cursor-pointer" onClick={() => setPage('home')}>
-          <Icons.Logo size={40} />
-          <div className="hidden md:block"><Icons.Wordmark /></div>
-        </div>
-
-        <div className="flex items-center space-x-8">
-          <button className="text-white/60 hover:text-white"><Icons.Search /></button>
-          <button onClick={() => setPage('cart')} className="relative text-white/60 hover:text-white">
+        <div className={`flex items-center space-x-8 ${textColor}`}>
+          <button className="hover:opacity-50"><Icons.Search /></button>
+          <button onClick={() => setPage('cart')} className="relative hover:opacity-50">
             <Icons.Cart />
             {cartCount > 0 && (
-              <span className="absolute -top-2 -right-2 bg-white text-[#3B2182] text-[9px] w-4 h-4 rounded-full flex items-center justify-center font-bold animate-in zoom-in">{cartCount}</span>
+              <span className="absolute -top-2 -right-2 bg-[#3B2182] text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-black animate-pulse">{cartCount}</span>
             )}
           </button>
         </div>
       </div>
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 bg-[#3B2182] z-[60] p-12 flex flex-col items-center justify-center space-y-12 animate-in fade-in duration-300">
-          <button onClick={() => setMobileMenuOpen(false)} className="absolute top-8 right-8 text-white"><Icons.Close /></button>
-          <Icons.FullIdentity color="#FFFFFF" size={120} />
-          <div className="flex flex-col items-center space-y-8 text-xl font-bold tracking-[0.2em] text-white uppercase">
-            <button onClick={() => { setPage('shop'); setMobileMenuOpen(false); }}>精选商城</button>
-            <button onClick={() => { setPage('story'); setMobileMenuOpen(false); }}>品牌故事</button>
-          </div>
-        </div>
-      )}
     </nav>
   );
 };
 
-// --- Page Components ---
+// --- Page: Home ---
+const HomePage: React.FC<{ setPage: (p: Page) => void }> = ({ setPage }) => {
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => e.isIntersecting && e.target.classList.add('active'));
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal-up').forEach(el => observer.observe(el));
+    return () => observer.disconnect();
+  }, []);
 
-const Home: React.FC<{ setPage: (p: Page) => void }> = ({ setPage }) => (
-  <div className="fade-in">
-    <section className="relative h-screen flex flex-col items-center justify-center text-center px-8">
-      <div className="absolute inset-0 bg-black/40 z-10"></div>
-      <img src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=2000&auto=format&fit=crop" className="absolute inset-0 w-full h-full object-cover" alt="Hero" />
-      <div className="relative z-20 space-y-12 max-w-4xl">
-        <Icons.FullIdentity size={160} />
-        <h1 className="text-5xl md:text-8xl font-light tracking-tight text-white leading-tight">好咖啡<br/>你我轻松拥有</h1>
-        <button onClick={() => setPage('shop')} className="mt-8 bg-white text-[#3B2182] px-16 py-5 text-[12px] font-bold uppercase tracking-[0.4em] hover:bg-[#280071] hover:text-white transition-all shadow-xl">立即开启探索</button>
-      </div>
-    </section>
-  </div>
-);
+  return (
+    <div className="bg-white">
+      <section className="relative h-screen flex flex-col items-center justify-center text-center overflow-hidden">
+        <div className="absolute inset-0 bg-black/40 z-10" />
+        <img 
+          src="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=2000&auto=format&fit=crop" 
+          className="absolute inset-0 w-full h-full object-cover scale-105 animate-[subtle-zoom_20s_infinite_alternate]"
+          alt="Hero"
+        />
+        <div className="relative z-20 space-y-12 max-w-4xl px-8">
+          <div className="reveal-up">
+            <Icons.FullIdentity size={100} />
+          </div>
+          <h1 className="reveal-up delay-200 serif-title text-5xl md:text-8xl text-white font-extralight leading-tight">
+            猎寻于<br/><span className="italic font-normal">火山之巅</span>
+          </h1>
+          <button 
+            onClick={() => setPage('shop')}
+            className="reveal-up delay-500 btn-premium bg-white text-gray-900 px-16 py-6 text-[10px] font-bold uppercase tracking-widest-plus hover:bg-black hover:text-white transition-all shadow-2xl"
+          >
+            开启品鉴之旅
+          </button>
+        </div>
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-20 text-white/30 animate-bounce">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1"><path d="M7 13l5 5 5-5M7 6l5 5 5-5"/></svg>
+        </div>
+      </section>
 
-const Shop: React.FC<{ products: Product[], onAddToCart: (p: Product) => void, isLoading: boolean }> = ({ products, onAddToCart, isLoading }) => {
-  const [filter, setFilter] = useState<'all' | 'coffee' | 'equipment' | 'merchandise'>('all');
+      <section className="py-40 px-10">
+        <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-32 items-center">
+          <div className="reveal-up relative aspect-[4/5] overflow-hidden bg-gray-50">
+            <img 
+              src="https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?q=80&w=1200&auto=format&fit=crop" 
+              className="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-1000"
+              alt="Process"
+            />
+          </div>
+          <div className="reveal-up space-y-10">
+            <p className="text-[#3B2182] text-[10px] font-black uppercase tracking-widest-plus">The Hunt</p>
+            <h2 className="serif-title text-5xl leading-tight font-light italic">拒绝平庸的采摘，<br/>只为极致的共鸣。</h2>
+            <p className="text-gray-500 font-light leading-loose text-lg">
+              Taiwäka 坚持与东非小农直接贸易。在海拔 2000 米以上的裂谷带，我们如鹰般敏锐地捕捉每一颗咖啡豆在风味巅峰的瞬间。这不仅是饮品，更是对大自然风土 (Terroir) 的精准复刻。
+            </p>
+            <button 
+              onClick={() => setPage('story')}
+              className="text-[10px] font-bold uppercase tracking-[0.4em] border-b border-gray-900 pb-2 hover:text-[#3B2182] hover:border-[#3B2182] transition-colors"
+            >
+              了解品牌哲学
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// --- Page: Shop ---
+const ShopPage: React.FC<{ products: Product[], onAdd: (p: Product) => void, loading: boolean }> = ({ products, onAdd, loading }) => {
+  const [filter, setFilter] = useState('all');
   const filtered = filter === 'all' ? products : products.filter(p => p.category === filter);
 
   return (
-    <div className="pt-40 pb-20 bg-white min-h-screen px-6 fade-in">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-wrap gap-8 mb-20 border-b border-gray-100 pb-8 text-[11px] font-bold uppercase tracking-[0.3em] text-gray-400">
-          <button onClick={() => setFilter('all')} className={filter === 'all' ? 'text-[#3B2182]' : ''}>全部商品</button>
-          <button onClick={() => setFilter('coffee')} className={filter === 'coffee' ? 'text-[#3B2182]' : ''}>精品咖啡豆</button>
-          <button onClick={() => setFilter('equipment')} className={filter === 'equipment' ? 'text-[#3B2182]' : ''}>冲煮器具</button>
-          <button onClick={() => setFilter('merchandise')} className={filter === 'merchandise' ? 'text-[#3B2182]' : ''}>生活周边</button>
-        </div>
-
-        {isLoading ? (
-          <div className="py-40 text-center animate-pulse text-gray-300 font-bold uppercase tracking-widest">正在为您甄选好物...</div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-20">
-            {filtered.map(p => (
-              <div key={p.id} className="group flex flex-col items-center text-center">
-                <div className="relative aspect-[3/4] w-full overflow-hidden bg-gray-50 mb-8">
-                  <img src={p.image || 'https://via.placeholder.com/600x800'} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" alt={p.name} />
-                  <button 
-                    onClick={() => onAddToCart(p)}
-                    className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-[#3B2182] text-white px-8 py-3 text-[10px] font-bold uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-all transform translate-y-4 group-hover:translate-y-0"
-                  >加入购物车</button>
-                </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-2 uppercase">{p.name}</h3>
-                <p className="text-gray-400 text-sm mb-4 h-10 overflow-hidden px-4">{p.description}</p>
-                <p className="text-[#3B2182] font-black">¥{p.price}</p>
-              </div>
-            ))}
-            {filtered.length === 0 && <div className="col-span-3 py-40 text-center text-gray-300 font-bold uppercase tracking-widest">暂无相关产品</div>}
+    <div className="pt-48 pb-40 bg-white px-10 min-h-screen">
+      <div className="max-w-[1440px] mx-auto">
+        <header className="mb-24 flex flex-col lg:flex-row justify-between items-baseline gap-10">
+          <div className="reveal-up active">
+            <h2 className="serif-title text-7xl font-light italic text-[#3B2182] mb-4">Collection</h2>
+            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest-plus">甄选火山豆种与专业手冲器具</p>
           </div>
-        )}
+          <div className="flex flex-wrap gap-12 text-[10px] font-bold uppercase tracking-[0.4em] text-gray-300">
+            {['all', 'coffee', 'equipment', 'merchandise'].map(f => (
+              <button 
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`transition-colors hover:text-black ${filter === f ? 'text-black border-b border-black pb-1' : ''}`}
+              >
+                {f === 'all' ? '全部' : f === 'coffee' ? '豆子' : f === 'equipment' ? '器具' : '周边'}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-32">
+          {filtered.map((p, idx) => (
+            <div key={p.id} className="product-card group cursor-pointer reveal-up active" style={{ transitionDelay: `${idx * 100}ms` }}>
+              <div className="relative aspect-[3/4] overflow-hidden bg-[#FBFBFB] mb-8">
+                <img src={p.image} className="w-full h-full object-cover" alt={p.name} />
+                {p.tag && (
+                  <span className="absolute top-6 left-6 bg-white px-4 py-1.5 text-[8px] font-bold tracking-widest uppercase shadow-sm">
+                    {p.tag}
+                  </span>
+                )}
+                <button 
+                  onClick={() => onAdd(p)}
+                  className="absolute inset-x-10 bottom-10 bg-white text-gray-900 py-5 text-[9px] font-bold uppercase tracking-widest opacity-0 translate-y-4 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-500 shadow-xl hover:bg-[#3B2182] hover:text-white"
+                >
+                  Quick Add to Bag
+                </button>
+              </div>
+              <div className="space-y-3">
+                <div className="flex justify-between items-baseline">
+                  <h3 className="text-lg font-light tracking-tight uppercase text-gray-900">{p.name}</h3>
+                  <p className="text-[#3B2182] font-black">¥{p.price}</p>
+                </div>
+                <p className="text-gray-400 text-xs font-light leading-relaxed pr-8 line-clamp-2">{p.description}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
 };
 
-const Story: React.FC = () => (
-  <div className="pt-40 pb-20 bg-white min-h-screen fade-in">
-    <div className="max-w-4xl mx-auto px-8 space-y-24 text-center">
-      <h2 className="text-6xl font-black italic uppercase text-[#3B2182]">猎寻原生之味</h2>
-      <p className="text-xl text-gray-600 font-light leading-loose">
-        Taiwäka，源自东非斯瓦希里语，意为“鹰的敏锐”。我们不仅仅是烘焙商，更是咖啡猎寻者。在海拔 2000 米以上的火山土壤，我们追踪每一颗原生态咖啡豆的足迹。
-      </p>
-      <img src="https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?q=80&w=1200&auto=format&fit=crop" className="w-full grayscale shadow-2xl" alt="Brewing" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-16 text-left text-gray-600 font-light leading-loose">
-        <p>我们的团队常年驻扎产地，与庄园主直接贸易。我们剔除中间环节，只为确保每一分收益都能回流到辛勤的咖农手中，并保证每一袋豆子都拥有可追溯的纯净灵魂。</p>
-        <p>从微气候的观测到精准烘焙曲线的打磨，Taiwäka 致力于打破精品咖啡的壁垒。我们相信：好咖啡，应当是你我都能轻松拥有的生活艺术。</p>
-      </div>
-    </div>
-  </div>
-);
-
-const Cart: React.FC<{ items: CartItem[], updateQty: (id: string, d: number) => void, removeItem: (id: string) => void }> = ({ items, updateQty, removeItem }) => {
-  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+// --- Page: Cart ---
+const CartPage: React.FC<{ items: CartItem[], update: (id: string, d: number) => void, remove: (id: string) => void }> = ({ items, update, remove }) => {
+  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
   return (
-    <div className="pt-40 pb-20 bg-white min-h-screen px-6 fade-in">
-      <div className="max-w-3xl mx-auto">
-        <h2 className="text-4xl font-black italic mb-12 uppercase text-[#3B2182]">您的选购清单</h2>
+    <div className="pt-48 pb-40 px-10 bg-white min-h-screen">
+      <div className="max-w-3xl mx-auto reveal-up active">
+        <h2 className="serif-title text-5xl font-light italic mb-16 text-[#3B2182]">My Shopping Bag</h2>
+        
         {items.length === 0 ? (
-          <div className="text-center py-20 border-2 border-dashed border-gray-100">
-            <p className="text-gray-400 font-bold uppercase tracking-widest">购物车还是空的</p>
+          <div className="text-center py-32 border-2 border-dashed border-gray-100">
+            <p className="text-gray-300 font-bold uppercase tracking-widest text-[10px]">您的清单空空如也</p>
           </div>
         ) : (
-          <div className="space-y-12">
+          <div className="space-y-16">
             {items.map(item => (
-              <div key={item.id} className="flex gap-8 items-center border-b border-gray-50 pb-8">
-                <img src={item.image || 'https://via.placeholder.com/150'} className="w-24 h-32 object-cover bg-gray-50" alt={item.name} />
-                <div className="flex-1">
-                  <h3 className="font-bold text-xl uppercase">{item.name}</h3>
-                  <p className="text-[#3B2182] font-black">¥{item.price}</p>
+              <div key={item.id} className="flex gap-10 items-center border-b border-gray-50 pb-12">
+                <div className="w-24 aspect-[3/4] bg-gray-50 overflow-hidden">
+                  <img src={item.image} className="w-full h-full object-cover" alt={item.name} />
                 </div>
-                <div className="flex items-center space-x-4 border border-gray-200 px-4 py-2">
-                  <button onClick={() => updateQty(item.id, -1)} className="font-bold">-</button>
-                  <span className="w-8 text-center">{item.quantity}</span>
-                  <button onClick={() => updateQty(item.id, 1)} className="font-bold">+</button>
+                <div className="flex-1 space-y-2">
+                  <h3 className="font-bold uppercase tracking-tight text-xl">{item.name}</h3>
+                  <p className="text-[#3B2182] font-black text-sm">¥{item.price}</p>
                 </div>
-                <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-500 transition-colors"><Icons.Close /></button>
+                <div className="flex items-center space-x-6 border border-gray-200 px-5 py-3 rounded-full">
+                  <button onClick={() => update(item.id, -1)} className="hover:text-[#3B2182]">-</button>
+                  <span className="text-sm font-bold w-4 text-center">{item.quantity}</span>
+                  <button onClick={() => update(item.id, 1)} className="hover:text-[#3B2182]">+</button>
+                </div>
+                <button onClick={() => remove(item.id)} className="text-gray-300 hover:text-red-500 transition-colors">
+                  <Icons.Close />
+                </button>
               </div>
             ))}
-            <div className="flex justify-between items-end pt-8">
+            
+            <div className="flex flex-col md:flex-row justify-between items-end md:items-center pt-10 gap-8">
               <div>
-                <p className="text-gray-400 text-xs uppercase mb-2">订单总计</p>
-                <p className="text-5xl font-black text-[#3B2182]">¥{total}</p>
+                <p className="text-gray-400 text-[9px] font-bold uppercase tracking-widest mb-2">订单预估总计</p>
+                <p className="text-6xl font-black text-gray-900">¥{subtotal}</p>
               </div>
-              <button className="bg-[#3B2182] text-white px-12 py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#280071] transition-all">前往结算</button>
+              <button className="bg-[#3B2182] text-white px-20 py-6 text-[10px] font-bold uppercase tracking-widest-plus shadow-2xl hover:bg-black transition-all">
+                Proceed to Checkout
+              </button>
             </div>
           </div>
         )}
@@ -169,78 +220,176 @@ const Cart: React.FC<{ items: CartItem[], updateQty: (id: string, d: number) => 
   );
 };
 
-// --- App Root ---
+// --- Page: Story ---
+const StoryPage: React.FC = () => (
+  <div className="bg-[#F9F7F2] min-h-screen pt-48 pb-40">
+    <div className="max-w-4xl mx-auto px-10 space-y-40">
+      <div className="text-center space-y-10 reveal-up active">
+        <h2 className="serif-title text-7xl font-light italic text-[#3B2182]">The Hunt</h2>
+        <p className="text-xl text-gray-600 font-light leading-loose max-w-2xl mx-auto">
+          Taiwäka 诞生于对“原生味觉”的执念。我们相信，最好的咖啡不应被过度设计，而是被耐心地“狩猎”出来。
+        </p>
+      </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
+        <div className="reveal-up active">
+          <img src="https://images.unsplash.com/photo-1524350303359-2e8ae15adad5?q=80&w=1200" className="w-full shadow-2xl" alt="Volcano" />
+        </div>
+        <div className="space-y-6 reveal-up active delay-300">
+          <h4 className="text-[10px] font-black uppercase tracking-widest-plus text-[#3B2182]">Volcanic Soil</h4>
+          <p className="text-gray-500 font-light leading-loose italic text-lg">
+            “火山灰赋予了豆子如丝绒般的深度。”
+          </p>
+          <p className="text-gray-500 font-light leading-loose">
+            我们专注于东非大裂谷边缘的产地。那里的土壤富含矿物质，海拔常年维持在 1800-2400 米，正是这种极致的生存压力，压榨出了咖啡豆内敛而丰富的酸质与甜感。
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+// --- AI Guide Component ---
+const AICoffeeGuide: React.FC = () => {
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [resp, setResp] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const consult = async () => {
+    if (!msg.trim()) return;
+    setLoading(true);
+    const res = await getCoffeeRecommendation(msg);
+    setResp(res);
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed bottom-12 right-12 z-[150]">
+      {!open ? (
+        <button 
+          onClick={() => setOpen(true)}
+          className="bg-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center border border-gray-50 hover:scale-110 transition-transform group"
+        >
+          <div className="absolute -top-14 right-0 bg-black text-white text-[8px] font-bold px-4 py-2 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest whitespace-nowrap">AI 风味导师</div>
+          <Icons.Settings />
+        </button>
+      ) : (
+        <div className="bg-white w-[360px] p-10 shadow-2xl rounded-sm border border-gray-50 animate-in slide-in-from-bottom-5 duration-500">
+          <div className="flex justify-between items-center mb-8">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest-plus text-gray-400">Cup Mentor</h4>
+            <button onClick={() => setOpen(false)} className="hover:rotate-90 transition-transform"><Icons.Close /></button>
+          </div>
+          <p className="text-xs text-gray-500 mb-8 font-light leading-relaxed pr-6">描述您此刻的心情、天气或理想的风味词，让我为您猎寻专属那一杯。</p>
+          <textarea 
+            className="w-full bg-gray-50 p-5 text-xs outline-none focus:ring-1 focus:ring-[#3B2182] transition-all resize-none mb-6 font-light"
+            rows={2}
+            value={msg}
+            onChange={e => setMsg(e.target.value)}
+            placeholder="例如：雨后的宁静，想要温润的巧克力感..."
+          />
+          <button 
+            onClick={consult}
+            disabled={loading}
+            className="w-full bg-[#3B2182] text-white py-5 text-[9px] font-bold uppercase tracking-widest-plus hover:bg-black transition-colors disabled:opacity-50"
+          >
+            {loading ? 'HUNTING...' : '获取专家建议'}
+          </button>
+          {resp && (
+            <div className="mt-8 pt-8 border-t border-gray-50 text-[11px] font-light leading-loose text-gray-700 italic animate-in fade-in duration-1000">
+              {resp}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- App Controller ---
 export default function App() {
   const [page, setPage] = useState<Page>('home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isScrolled, setIsScrolled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [scrolled, setScrolled] = useState(false);
 
   const fetchProducts = async () => {
-    setIsLoading(true);
+    setLoading(true);
     try {
       const res = await fetch(API_URL);
-      if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-      
-      const rawText = await res.text();
-      // 如果后端返回空，设为空数组，防止 JSON.parse 报错
-      if (!rawText.trim()) {
-        setProducts([]);
-        return;
-      }
-
-      const data = JSON.parse(rawText);
-      setProducts(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Fetch error:', err);
-      // 如果出现错误（如 JSON 解析失败），优雅降级为空数组
-      setProducts([]);
+      if (!res.ok) throw new Error();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : INITIAL_PRODUCTS;
+      setProducts(data.length > 0 ? data : INITIAL_PRODUCTS);
+    } catch {
+      setProducts(INITIAL_PRODUCTS);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchProducts();
-    const handleScroll = () => setIsScrolled(window.scrollY > 50);
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    const scrollHandler = () => setScrolled(window.scrollY > 80);
+    window.addEventListener('scroll', scrollHandler, { passive: true });
+    return () => window.removeEventListener('scroll', scrollHandler);
   }, []);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (p: Product) => {
     setCart(prev => {
-      const existing = prev.find(i => i.id === product.id);
-      if (existing) return prev.map(i => i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: 1 }];
+      const ex = prev.find(i => i.id === p.id);
+      if (ex) return prev.map(i => i.id === p.id ? { ...i, quantity: i.quantity + 1 } : i);
+      return [...prev, { ...p, quantity: 1 }];
     });
     setPage('cart');
-  };
-
-  const renderPage = () => {
-    switch (page) {
-      case 'home': return <Home setPage={setPage} />;
-      case 'shop': return <Shop products={products} onAddToCart={addToCart} isLoading={isLoading} />;
-      case 'story': return <Story />;
-      case 'cart': return <Cart items={cart} updateQty={(id, d) => setCart(p => p.map(i => i.id === id ? {...i, quantity: Math.max(1, i.quantity + d)} : i))} removeItem={id => setCart(p => p.filter(i => i.id !== id))} />;
-      default: return <Home setPage={setPage} />;
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <div className="flex flex-col min-h-screen bg-white">
-      <Navbar currentPage={page} setPage={p => { setPage(p); window.scrollTo(0,0); }} cartCount={cart.reduce((s,i)=>s+i.quantity, 0)} isScrolled={isScrolled} />
-      <main className="flex-1">{renderPage()}</main>
-      <footer className="bg-[#1A1A1A] py-20 px-8 text-white/40 text-[10px] uppercase tracking-[0.3em]">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-12 text-center md:text-left">
-          <Icons.FullIdentity size={80} color="rgba(255,255,255,0.2)" />
-          <div className="flex space-x-12">
-            <a href="#" className="hover:text-white transition-colors">隐私政策</a>
-            <a href="#" className="hover:text-white transition-colors">服务条款</a>
-            <a href="#" className="hover:text-white transition-colors">关于我们</a>
+      <Navbar 
+        page={page} 
+        setPage={p => { setPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+        cartCount={cart.reduce((s,i) => s + i.quantity, 0)} 
+        isScrolled={scrolled} 
+      />
+      
+      <main className="flex-1">
+        {page === 'home' && <HomePage setPage={setPage} />}
+        {page === 'shop' && <ShopPage products={products} onAdd={addToCart} loading={loading} />}
+        {page === 'story' && <StoryPage />}
+        {page === 'cart' && (
+          <CartPage 
+            items={cart} 
+            update={(id, d) => setCart(p => p.map(i => i.id === id ? { ...i, quantity: Math.max(1, i.quantity + d) } : i))} 
+            remove={id => setCart(p => p.filter(i => i.id !== id))} 
+          />
+        )}
+      </main>
+
+      <AICoffeeGuide />
+
+      <footer className="bg-[#0A0A0A] pt-40 pb-20 px-10 text-white/20 text-[9px] font-bold uppercase tracking-widest-plus">
+        <div className="max-w-[1440px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-20">
+          <div className="col-span-1 md:col-span-2">
+            <Icons.FullIdentity size={80} color="rgba(255,255,255,0.05)" />
+            <p className="mt-10 text-xs font-light max-w-sm leading-relaxed lowercase italic tracking-normal normal-case opacity-40">
+              Taiwäka (Swahili for "Eagle's Precision"). dedicated to hunting the purest flavors in volcanic soil across the East African Rift.
+            </p>
           </div>
-          <p>© 2025 Taiwäka Specialty Roasters. 蜀ICP备2021008888号</p>
+          <div className="space-y-6 flex flex-col">
+            <h5 className="text-white mb-2">Navigation</h5>
+            <button onClick={() => setPage('shop')} className="hover:text-white transition-colors text-left">The Shop</button>
+            <button onClick={() => setPage('story')} className="hover:text-white transition-colors text-left">Our Heritage</button>
+            <a href="#" className="hover:text-white transition-colors">Locations</a>
+          </div>
+          <div className="space-y-6 flex flex-col">
+            <h5 className="text-white mb-2">Support</h5>
+            <a href="#" className="hover:text-white transition-colors">Contact</a>
+            <a href="#" className="hover:text-white transition-colors">Shipping</a>
+            <p className="mt-auto opacity-30 tracking-widest">© 2025 Taiwäka Coffee. 蜀ICP备2021008888号</p>
+          </div>
         </div>
       </footer>
     </div>
