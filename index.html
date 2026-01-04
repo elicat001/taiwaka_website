@@ -1,81 +1,70 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Primary Meta Tags -->
     <title>太哇卡咖啡 Taiwaka Coffee | 猎寻原生之味</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;700;900&family=Noto+Serif+SC:wght@200;500;900&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --brand: #3B2182;
-            --bg: #FFFFFF;
-            --fg: #1A1A1A;
-            --muted: #8E8E93;
-        }
+    <meta name="title" content="太哇卡咖啡 Taiwaka Coffee | 猎寻原生之味">
+    <meta name="description" content="Taiwäka 诞生于对原生味觉的执念。源自东非火山高地，海拔2000米以上的精品咖啡豆。坚持直接贸易，猎寻每一颗豆子在风味巅峰的瞬间。">
+    <meta name="keywords" content="太哇卡,Taiwaka,精品咖啡,火山咖啡,东非咖啡,手冲咖啡,咖啡豆,specialty coffee">
+    <meta name="author" content="Taiwaka Coffee">
+    <meta name="robots" content="index, follow">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://taiwaka.coffee/">
+    <meta property="og:title" content="太哇卡咖啡 Taiwaka Coffee | 猎寻原生之味">
+    <meta property="og:description" content="源自东非火山高地的精品咖啡。坚持直接贸易，猎寻每一颗豆子在风味巅峰的瞬间。">
+    <meta property="og:image" content="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1200&auto=format&fit=crop">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://taiwaka.coffee/">
+    <meta property="twitter:title" content="太哇卡咖啡 Taiwaka Coffee | 猎寻原生之味">
+    <meta property="twitter:description" content="源自东非火山高地的精品咖啡。坚持直接贸易，猎寻每一颗豆子在风味巅峰的瞬间。">
+    <meta property="twitter:image" content="https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1200&auto=format&fit=crop">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://images.unsplash.com">
+    
+    <!-- Google Fonts - Optimized -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;700;900&family=Noto+Serif+SC:wght@200;500;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;700;900&family=Noto+Serif+SC:wght@200;500;900&display=swap" rel="stylesheet">
+    </noscript>
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#3B2182">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Store",
+      "name": "太哇卡咖啡 Taiwaka Coffee",
+      "description": "源自东非火山高地的精品咖啡",
+      "url": "https://taiwaka.coffee",
+      "logo": "https://taiwaka.coffee/logo.png",
+      "image": "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=1200&auto=format&fit=crop",
+      "priceRange": "¥¥¥",
+      "address": {
+        "@type": "PostalAddress",
+        "addressCountry": "CN"
+      },
+      "sameAs": []
+    }
+    </script>
 
-        html {
-            scroll-behavior: smooth;
-            -webkit-font-smoothing: antialiased;
-            background-color: var(--bg);
-        }
-
-        body {
-            font-family: 'Inter', 'Noto Sans SC', sans-serif;
-            color: var(--fg);
-        }
-
-        /* 极致图像优化 */
-        img, svg {
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
-            shape-rendering: geometricPrecision;
-        }
-
-        /* 隐藏滚动条但保留功能 */
-        ::-webkit-scrollbar { width: 0px; background: transparent; }
-
-        /* 高级动效 */
-        .reveal-up {
-            opacity: 0;
-            transform: translateY(40px);
-            transition: all 1.2s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .reveal-up.active {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        /* 蓝瓶式按钮 */
-        .btn-premium {
-            position: relative;
-            overflow: hidden;
-            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .btn-premium::after {
-            content: '';
-            position: absolute;
-            top: 0; left: -100%;
-            width: 100%; height: 100%;
-            background: rgba(255,255,255,0.2);
-            transition: all 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-        }
-        .btn-premium:hover::after { left: 100%; }
-
-        /* 文本排版增强 */
-        .serif-title { font-family: 'Noto Serif SC', serif; }
-        .tracking-widest-plus { letter-spacing: 0.6em; }
-
-        /* 网格悬停 */
-        .product-card img { transition: transform 1.8s cubic-bezier(0.16, 1, 0.3, 1); }
-        .product-card:hover img { transform: scale(1.05); }
-
-        @keyframes subtle-zoom {
-            from { transform: scale(1.05); }
-            to { transform: scale(1.15); }
-        }
-    </style>
 <script type="importmap">
 {
   "imports": {
@@ -89,5 +78,11 @@
 </head>
 <body>
     <div id="root"></div>
+    <noscript>
+        <div style="text-align: center; padding: 50px; font-family: sans-serif;">
+            <h1>请启用 JavaScript</h1>
+            <p>本网站需要 JavaScript 才能正常运行。请在浏览器设置中启用 JavaScript。</p>
+        </div>
+    </noscript>
 </body>
 </html>

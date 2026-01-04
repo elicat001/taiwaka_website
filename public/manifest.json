@@ -1,0 +1,27 @@
+{
+  "name": "太哇卡咖啡 Taiwaka Coffee",
+  "short_name": "Taiwaka",
+  "description": "源自东非火山高地的精品咖啡",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#3B2182",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["food", "lifestyle", "shopping"],
+  "lang": "zh-CN",
+  "dir": "ltr"
+}
