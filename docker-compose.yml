@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Go 后端服务
+  api:
+    build:
+      context: ./backend-go
+      dockerfile: Dockerfile
+    container_name: taiwaka-api
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - DB_HOST=db
+      - DB_PORT=3306
+      - DB_USER=${DB_USER:-root}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      - DB_NAME=${DB_NAME:-taiwaka_coffee}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./dist:/app/dist:ro
+    networks:
+      - taiwaka-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # MySQL 数据库
+  db:
+    image: mysql:8.0
+    container_name: taiwaka-db
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DB_PASSWORD:-password}
+      - MYSQL_DATABASE=${DB_NAME:-taiwaka_coffee}
+      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
+      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./drizzle/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - taiwaka-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-password}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Nginx 反向代理 (可选，用于生产环境)
+  nginx:
+    image: nginx:alpine
+    container_name: taiwaka-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    networks:
+      - taiwaka-network
+    restart: unless-stopped
+    profiles:
+      - production
+
+networks:
+  taiwaka-network:
+    driver: bridge
+
+volumes:
+  mysql-data:
+    driver: local
