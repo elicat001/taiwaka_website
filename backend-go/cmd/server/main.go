@@ -32,7 +32,7 @@ func main() {
 	// 创建 Gin 引擎
 	r := gin.New()
 
-	// 应用中间件
+	// 应用全局中间件
 	r.Use(middleware.Logger())
 	r.Use(middleware.Recovery())
 	r.Use(middleware.CORS())
@@ -55,7 +55,7 @@ func main() {
 	// API 路由组
 	api := r.Group("/api")
 	{
-		// 健康检查
+		// 健康检查 (公开)
 		api.GET("/health", func(c *gin.Context) {
 			c.JSON(200, gin.H{
 				"status":  "healthy",
@@ -64,19 +64,15 @@ func main() {
 			})
 		})
 
-		// 产品路由
-		products := api.Group("/products")
-		{
-			products.GET("", productHandler.GetProducts)
-			products.GET("/featured", productHandler.GetFeaturedProducts)
-			products.GET("/category/:category", productHandler.GetProductsByCategory)
-			products.GET("/:id", productHandler.GetProduct)
-			products.POST("", productHandler.CreateProduct)
-			products.PUT("/:id", productHandler.UpdateProduct)
-			products.DELETE("/:id", productHandler.DeleteProduct)
-		}
+		// ============ 公开路由 (无需认证) ============
 
-		// 购物车路由
+		// 产品查询 (公开)
+		api.GET("/products", productHandler.GetProducts)
+		api.GET("/products/featured", productHandler.GetFeaturedProducts)
+		api.GET("/products/category/:category", productHandler.GetProductsByCategory)
+		api.GET("/products/:id", productHandler.GetProduct)
+
+		// 购物车 (公开 - 基于 sessionId)
 		cart := api.Group("/cart")
 		{
 			cart.GET("", cartHandler.GetCart)
@@ -87,20 +83,42 @@ func main() {
 			cart.DELETE("", cartHandler.ClearCart)
 		}
 
-		// 订单路由
-		orders := api.Group("/orders")
+		// 订单创建和查询 (公开 - 客户自助)
+		api.POST("/orders", orderHandler.CreateOrder)
+		api.GET("/orders/by-email", orderHandler.GetOrdersByEmail)
+		api.GET("/orders/number/:orderNumber", orderHandler.GetOrderByNumber)
+
+		// AI 推荐 (公开)
+		ai := api.Group("/ai")
 		{
-			orders.GET("", orderHandler.GetOrders)
-			orders.GET("/by-email", orderHandler.GetOrdersByEmail)
-			orders.GET("/number/:orderNumber", orderHandler.GetOrderByNumber)
-			orders.GET("/:id", orderHandler.GetOrder)
-			orders.POST("", orderHandler.CreateOrder)
-			orders.PUT("/:id/status", orderHandler.UpdateOrderStatus)
-			orders.POST("/:id/cancel", orderHandler.CancelOrder)
+			ai.POST("/recommend", aiHandler.GetCoffeeRecommendation)
+			ai.GET("/health", aiHandler.HealthCheck)
 		}
 
-		// 客户路由
+		// ============ 受保护路由 (需要 API Key 认证) ============
+
+		// 产品管理 (需认证)
+		adminProducts := api.Group("/products")
+		adminProducts.Use(middleware.APIKeyAuth())
+		{
+			adminProducts.POST("", productHandler.CreateProduct)
+			adminProducts.PUT("/:id", productHandler.UpdateProduct)
+			adminProducts.DELETE("/:id", productHandler.DeleteProduct)
+		}
+
+		// 订单管理 (需认证)
+		adminOrders := api.Group("/orders")
+		adminOrders.Use(middleware.APIKeyAuth())
+		{
+			adminOrders.GET("", orderHandler.GetOrders)
+			adminOrders.GET("/:id", orderHandler.GetOrder)
+			adminOrders.PUT("/:id/status", orderHandler.UpdateOrderStatus)
+			adminOrders.POST("/:id/cancel", orderHandler.CancelOrder)
+		}
+
+		// 客户管理 (需认证)
 		customers := api.Group("/customers")
+		customers.Use(middleware.APIKeyAuth())
 		{
 			customers.GET("", customerHandler.GetCustomers)
 			customers.GET("/by-email", customerHandler.GetCustomerByEmail)
@@ -111,8 +129,9 @@ func main() {
 			customers.DELETE("/:id", customerHandler.DeleteCustomer)
 		}
 
-		// 库存路由
+		// 库存管理 (需认证)
 		stock := api.Group("/stock")
+		stock.Use(middleware.APIKeyAuth())
 		{
 			stock.GET("/logs", stockHandler.GetStockLogs)
 			stock.GET("/logs/product/:productId", stockHandler.GetProductStockLogs)
@@ -121,15 +140,8 @@ func main() {
 			stock.POST("/adjust", stockHandler.AdjustStock)
 		}
 
-		// AI 推荐路由
-		ai := api.Group("/ai")
-		{
-			ai.POST("/recommend", aiHandler.GetCoffeeRecommendation)
-			ai.GET("/health", aiHandler.HealthCheck)
-		}
-
-		// 仪表盘统计
-		api.GET("/stats/dashboard", orderHandler.GetDashboardStats)
+		// 仪表盘统计 (需认证)
+		api.GET("/stats/dashboard", middleware.APIKeyAuth(), orderHandler.GetDashboardStats)
 	}
 
 	// 处理前端路由 (SPA)
@@ -151,6 +163,11 @@ func main() {
 	addr := ":" + cfg.Port
 	log.Printf("[Server] Starting Taiwaka Coffee API on %s", addr)
 	log.Printf("[Server] Environment: %s", cfg.Env)
+	if cfg.AdminAPIKey != "" {
+		log.Println("[Server] Admin API authentication: ENABLED")
+	} else {
+		log.Println("[Server] Admin API authentication: DISABLED (development mode)")
+	}
 
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("[Fatal] Failed to start server: %v", err)

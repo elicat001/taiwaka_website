@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // OrderHandler 订单处理器
@@ -51,9 +52,16 @@ func (h *OrderHandler) GetOrders(c *gin.Context) {
 	var total int64
 	query.Count(&total)
 
-	// 排序
-	orderClause := params.SortBy + " " + params.SortOrder
-	query = query.Order(orderClause)
+	// 排序 - 使用安全的排序方式
+	sortBy := "createdAt"
+	if params.SortBy == "totalPrice" || params.SortBy == "orderNumber" {
+		sortBy = params.SortBy
+	}
+	sortOrder := "DESC"
+	if params.SortOrder == "ASC" || params.SortOrder == "asc" {
+		sortOrder = "ASC"
+	}
+	query = query.Order(sortBy + " " + sortOrder)
 
 	// 分页
 	offset := (params.Page - 1) * params.Limit
@@ -98,7 +106,7 @@ func (h *OrderHandler) GetOrderByNumber(c *gin.Context) {
 	response.Success(c, order)
 }
 
-// CreateOrder 创建订单 (带事务)
+// CreateOrder 创建订单 (带事务和行级锁，防止超卖)
 func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	var input models.OrderInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -116,17 +124,16 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		}
 	}()
 
-	// 1. 验证所有产品并计算总价
-	var totalPrice float64
-	var orderItems []models.OrderItem
+	// 1. 使用 FOR UPDATE 锁定所有涉及的产品行，防止并发修改
 	productIDs := make([]uint, len(input.Items))
-
 	for i, item := range input.Items {
 		productIDs[i] = item.ProductID
 	}
 
 	var products []models.Product
-	if err := tx.Where("id IN ?", productIDs).Find(&products).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id IN ?", productIDs).
+		Find(&products).Error; err != nil {
 		tx.Rollback()
 		response.InternalError(c, "Failed to fetch products")
 		return
@@ -138,7 +145,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		productMap[products[i].ID] = &products[i]
 	}
 
-	// 验证每个订单项
+	// 2. 验证每个订单项并计算总价
+	var totalPrice float64
+	var orderItems []models.OrderItem
+
 	for _, item := range input.Items {
 		product, exists := productMap[item.ProductID]
 		if !exists || product.IsActive != 1 {
@@ -149,7 +159,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 		if product.Stock < item.Quantity {
 			tx.Rollback()
-			response.BadRequest(c, fmt.Sprintf("Insufficient stock for product: %s", product.Name))
+			response.BadRequest(c, fmt.Sprintf("Insufficient stock for product: %s (available: %d, requested: %d)",
+				product.Name, product.Stock, item.Quantity))
 			return
 		}
 
@@ -166,7 +177,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		})
 	}
 
-	// 2. 查找或创建客户
+	// 3. 查找或创建客户
 	var customer models.Customer
 	result := tx.Where("email = ?", input.CustomerEmail).First(&customer)
 	if result.Error != nil {
@@ -184,10 +195,10 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		}
 	}
 
-	// 3. 生成订单号
+	// 4. 生成订单号
 	orderNumber := generateOrderNumber()
 
-	// 4. 创建订单
+	// 5. 创建订单
 	order := models.Order{
 		OrderNumber:     orderNumber,
 		CustomerID:      &customer.ID,
@@ -206,7 +217,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// 5. 创建订单项并扣减库存
+	// 6. 创建订单项并扣减库存 (使用原子操作)
 	for i := range orderItems {
 		orderItems[i].OrderID = order.ID
 
@@ -217,16 +228,29 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 			return
 		}
 
-		// 扣减库存
 		product := productMap[orderItems[i].ProductID]
-		newStock := product.Stock - orderItems[i].Quantity
+		previousStock := product.Stock
 
-		if err := tx.Model(&models.Product{}).Where("id = ?", product.ID).
-			Update("stock", newStock).Error; err != nil {
+		// 使用原子 SQL 操作扣减库存，避免竞态条件
+		result := tx.Model(&models.Product{}).
+			Where("id = ? AND stock >= ?", product.ID, orderItems[i].Quantity).
+			Update("stock", gorm.Expr("stock - ?", orderItems[i].Quantity))
+
+		if result.Error != nil {
 			tx.Rollback()
 			response.InternalError(c, "Failed to update stock")
 			return
 		}
+
+		if result.RowsAffected == 0 {
+			tx.Rollback()
+			response.BadRequest(c, fmt.Sprintf("Insufficient stock for product: %s", product.Name))
+			return
+		}
+
+		// 查询更新后的库存值用于日志记录
+		var updatedProduct models.Product
+		tx.First(&updatedProduct, product.ID)
 
 		// 记录库存变动
 		stockLog := models.StockLog{
@@ -234,8 +258,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 			ChangeAmount:  -orderItems[i].Quantity,
 			Reason:        models.ReasonOrder,
 			ReferenceID:   &order.ID,
-			PreviousStock: product.Stock,
-			NewStock:      newStock,
+			PreviousStock: previousStock,
+			NewStock:      updatedProduct.Stock,
 		}
 		if err := tx.Create(&stockLog).Error; err != nil {
 			tx.Rollback()
@@ -293,7 +317,7 @@ func (h *OrderHandler) UpdateOrderStatus(c *gin.Context) {
 	response.Success(c, order)
 }
 
-// CancelOrder 取消订单并恢复库存
+// CancelOrder 取消订单并恢复库存 (使用原子操作)
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -321,22 +345,37 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 
 	// 开始事务
 	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
 
-	// 恢复库存
+	// 恢复库存 (使用行锁和原子操作)
 	for _, item := range order.Items {
+		// 使用 FOR UPDATE 锁定产品行
 		var product models.Product
-		if err := tx.First(&product, item.ProductID).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&product, item.ProductID).Error; err != nil {
 			tx.Rollback()
 			response.InternalError(c, "Failed to find product")
 			return
 		}
 
-		newStock := product.Stock + item.Quantity
-		if err := tx.Model(&product).Update("stock", newStock).Error; err != nil {
+		previousStock := product.Stock
+
+		// 使用原子操作恢复库存
+		if err := tx.Model(&models.Product{}).
+			Where("id = ?", product.ID).
+			Update("stock", gorm.Expr("stock + ?", item.Quantity)).Error; err != nil {
 			tx.Rollback()
 			response.InternalError(c, "Failed to restore stock")
 			return
 		}
+
+		// 查询更新后的库存
+		var updatedProduct models.Product
+		tx.First(&updatedProduct, product.ID)
 
 		// 记录库存变动
 		stockLog := models.StockLog{
@@ -344,8 +383,8 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 			ChangeAmount:  item.Quantity,
 			Reason:        models.ReasonReturn,
 			ReferenceID:   &order.ID,
-			PreviousStock: product.Stock,
-			NewStock:      newStock,
+			PreviousStock: previousStock,
+			NewStock:      updatedProduct.Stock,
 		}
 		if err := tx.Create(&stockLog).Error; err != nil {
 			tx.Rollback()

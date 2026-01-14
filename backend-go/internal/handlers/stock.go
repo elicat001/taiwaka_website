@@ -8,6 +8,8 @@ import (
 	"taiwaka-coffee/pkg/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // StockHandler 库存处理器
@@ -83,7 +85,7 @@ func (h *StockHandler) GetProductStockLogs(c *gin.Context) {
 	response.Success(c, logs)
 }
 
-// AdjustStock 调整库存
+// AdjustStock 调整库存 (使用行锁和原子操作，防止竞态条件)
 func (h *StockHandler) AdjustStock(c *gin.Context) {
 	var input models.StockAdjustmentInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -95,16 +97,24 @@ func (h *StockHandler) AdjustStock(c *gin.Context) {
 
 	// 开始事务
 	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
 
-	// 获取产品
+	// 使用 FOR UPDATE 锁定产品行，防止并发修改
 	var product models.Product
-	if err := tx.First(&product, input.ProductID).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&product, input.ProductID).Error; err != nil {
 		tx.Rollback()
 		response.NotFound(c, "Product not found")
 		return
 	}
 
-	// 计算新库存
+	previousStock := product.Stock
+
+	// 计算新库存 (仅用于验证)
 	newStock := product.Stock + input.ChangeAmount
 	if newStock < 0 {
 		tx.Rollback()
@@ -112,21 +122,44 @@ func (h *StockHandler) AdjustStock(c *gin.Context) {
 		return
 	}
 
-	// 更新库存
-	if err := tx.Model(&product).Update("stock", newStock).Error; err != nil {
+	// 使用原子 SQL 操作更新库存
+	var result *gorm.DB
+	if input.ChangeAmount >= 0 {
+		// 增加库存
+		result = tx.Model(&models.Product{}).
+			Where("id = ?", input.ProductID).
+			Update("stock", gorm.Expr("stock + ?", input.ChangeAmount))
+	} else {
+		// 减少库存，需要确保库存足够
+		result = tx.Model(&models.Product{}).
+			Where("id = ? AND stock >= ?", input.ProductID, -input.ChangeAmount).
+			Update("stock", gorm.Expr("stock + ?", input.ChangeAmount))
+	}
+
+	if result.Error != nil {
 		tx.Rollback()
 		response.InternalError(c, "Failed to update stock")
 		return
 	}
 
-	// 记录变动
+	if result.RowsAffected == 0 && input.ChangeAmount < 0 {
+		tx.Rollback()
+		response.BadRequest(c, "Insufficient stock for this adjustment")
+		return
+	}
+
+	// 查询更新后的实际库存值
+	var updatedProduct models.Product
+	tx.First(&updatedProduct, input.ProductID)
+
+	// 记录变动 (使用实际的 previousStock 和 newStock)
 	stockLog := models.StockLog{
 		ProductID:     input.ProductID,
 		ChangeAmount:  input.ChangeAmount,
 		Reason:        input.Reason,
 		ReferenceID:   input.ReferenceID,
-		PreviousStock: product.Stock,
-		NewStock:      newStock,
+		PreviousStock: previousStock,
+		NewStock:      updatedProduct.Stock,
 	}
 
 	if err := tx.Create(&stockLog).Error; err != nil {
@@ -142,9 +175,9 @@ func (h *StockHandler) AdjustStock(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"product":       product.Name,
-		"previousStock": product.Stock,
+		"previousStock": previousStock,
 		"changeAmount":  input.ChangeAmount,
-		"newStock":      newStock,
+		"newStock":      updatedProduct.Stock,
 		"reason":        input.Reason,
 	})
 }
@@ -175,11 +208,11 @@ func (h *StockHandler) GetStockSummary(c *gin.Context) {
 	db := database.GetDB()
 
 	var summary struct {
-		TotalProducts    int64   `json:"totalProducts"`
-		TotalStock       int64   `json:"totalStock"`
-		LowStockCount    int64   `json:"lowStockCount"`
-		OutOfStockCount  int64   `json:"outOfStockCount"`
-		TotalStockValue  float64 `json:"totalStockValue"`
+		TotalProducts   int64   `json:"totalProducts"`
+		TotalStock      int64   `json:"totalStock"`
+		LowStockCount   int64   `json:"lowStockCount"`
+		OutOfStockCount int64   `json:"outOfStockCount"`
+		TotalStockValue float64 `json:"totalStockValue"`
 	}
 
 	// 总产品数

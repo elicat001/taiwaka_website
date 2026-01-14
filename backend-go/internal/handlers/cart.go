@@ -8,6 +8,7 @@ import (
 	"taiwaka-coffee/pkg/response"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm/clause"
 )
 
 // CartHandler 购物车处理器
@@ -52,7 +53,7 @@ func (h *CartHandler) GetCart(c *gin.Context) {
 	response.Success(c, displayItems)
 }
 
-// AddToCart 添加商品到购物车
+// AddToCart 添加商品到购物车 (使用事务和行锁防止竞态)
 func (h *CartHandler) AddToCart(c *gin.Context) {
 	var input models.CartItemInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -64,59 +65,83 @@ func (h *CartHandler) AddToCart(c *gin.Context) {
 		input.Quantity = 1
 	}
 
-	// 验证产品存在
+	db := database.GetDB()
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 使用 FOR UPDATE 锁定产品行，防止并发修改
 	var product models.Product
-	if err := database.GetDB().First(&product, input.ProductID).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&product, input.ProductID).Error; err != nil {
+		tx.Rollback()
 		response.NotFound(c, "Product not found")
 		return
 	}
 
 	if product.IsActive != 1 {
+		tx.Rollback()
 		response.BadRequest(c, "Product is not available")
-		return
-	}
-
-	// 检查库存
-	if product.Stock < input.Quantity {
-		response.BadRequest(c, "Insufficient stock")
 		return
 	}
 
 	// 检查是否已在购物车中
 	var existingItem models.CartItem
-	result := database.GetDB().
-		Where("sessionId = ? AND productId = ?", input.SessionID, input.ProductID).
+	result := tx.Where("sessionId = ? AND productId = ?", input.SessionID, input.ProductID).
 		First(&existingItem)
 
 	if result.Error == nil {
 		// 更新数量
 		newQuantity := existingItem.Quantity + input.Quantity
 		if newQuantity > product.Stock {
+			tx.Rollback()
 			response.BadRequest(c, "Insufficient stock")
 			return
 		}
-		if err := database.GetDB().Model(&existingItem).Update("quantity", newQuantity).Error; err != nil {
+		if err := tx.Model(&existingItem).Update("quantity", newQuantity).Error; err != nil {
+			tx.Rollback()
 			response.InternalError(c, "Failed to update cart")
 			return
 		}
 		existingItem.Quantity = newQuantity
+
+		if err := tx.Commit().Error; err != nil {
+			response.InternalError(c, "Failed to commit transaction")
+			return
+		}
 		response.Success(c, existingItem)
 	} else {
+		// 检查库存
+		if product.Stock < input.Quantity {
+			tx.Rollback()
+			response.BadRequest(c, "Insufficient stock")
+			return
+		}
+
 		// 创建新项
 		cartItem := models.CartItem{
 			SessionID: input.SessionID,
 			ProductID: input.ProductID,
 			Quantity:  input.Quantity,
 		}
-		if err := database.GetDB().Create(&cartItem).Error; err != nil {
+		if err := tx.Create(&cartItem).Error; err != nil {
+			tx.Rollback()
 			response.InternalError(c, "Failed to add to cart")
+			return
+		}
+
+		if err := tx.Commit().Error; err != nil {
+			response.InternalError(c, "Failed to commit transaction")
 			return
 		}
 		response.Created(c, cartItem)
 	}
 }
 
-// UpdateCartItem 更新购物车项数量
+// UpdateCartItem 更新购物车项数量 (使用事务和行锁)
 func (h *CartHandler) UpdateCartItem(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
 	if err != nil {
@@ -132,26 +157,44 @@ func (h *CartHandler) UpdateCartItem(c *gin.Context) {
 		return
 	}
 
+	db := database.GetDB()
+	tx := db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
 	var cartItem models.CartItem
-	if err := database.GetDB().First(&cartItem, id).Error; err != nil {
+	if err := tx.First(&cartItem, id).Error; err != nil {
+		tx.Rollback()
 		response.NotFound(c, "Cart item not found")
 		return
 	}
 
-	// 验证库存
+	// 使用 FOR UPDATE 锁定产品行
 	var product models.Product
-	if err := database.GetDB().First(&product, cartItem.ProductID).Error; err != nil {
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		First(&product, cartItem.ProductID).Error; err != nil {
+		tx.Rollback()
 		response.NotFound(c, "Product not found")
 		return
 	}
 
 	if input.Quantity > product.Stock {
+		tx.Rollback()
 		response.BadRequest(c, "Insufficient stock")
 		return
 	}
 
-	if err := database.GetDB().Model(&cartItem).Update("quantity", input.Quantity).Error; err != nil {
+	if err := tx.Model(&cartItem).Update("quantity", input.Quantity).Error; err != nil {
+		tx.Rollback()
 		response.InternalError(c, "Failed to update cart item")
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		response.InternalError(c, "Failed to commit transaction")
 		return
 	}
 

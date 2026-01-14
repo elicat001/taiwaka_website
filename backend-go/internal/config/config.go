@@ -22,6 +22,9 @@ type Config struct {
 
 	// Google Gemini API
 	GeminiAPIKey string
+
+	// Admin API Key (用于保护管理端点)
+	AdminAPIKey string
 }
 
 var AppConfig *Config
@@ -43,6 +46,7 @@ func Load() *Config {
 		DBPassword:   getEnv("DB_PASSWORD", ""),
 		DBName:       getEnv("DB_NAME", "taiwaka_coffee"),
 		GeminiAPIKey: getEnv("GEMINI_API_KEY", ""),
+		AdminAPIKey:  getEnv("ADMIN_API_KEY", ""),
 	}
 
 	log.Printf("[Config] Loaded configuration for %s environment", AppConfig.Env)

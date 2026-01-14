@@ -1,10 +1,9 @@
 import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import viteCompression from 'vite-plugin-compression';
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
     return {
       server: {
         port: 3000,
@@ -21,10 +20,7 @@ export default defineConfig(({ mode }) => {
           ext: '.gz',
         }),
       ],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
+      // API Key 已移至后端，不再编译到前端代码中
       resolve: {
         alias: {
           '@': path.resolve(__dirname, '.'),
@@ -59,7 +55,7 @@ export default defineConfig(({ mode }) => {
       },
       // 优化依赖预构建
       optimizeDeps: {
-        include: ['react', 'react-dom', '@google/genai'],
+        include: ['react', 'react-dom'],
       },
     };
 });
